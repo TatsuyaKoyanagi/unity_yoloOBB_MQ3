@@ -19,3 +19,7 @@ PerformanceTestRun*.*
 StreamingAssets*
 buildInfo.txt
 Packages/packages-lock.json
+
+# OVR SDK auto-generated build config
+Assets/Resources/OVRBuildConfig.asset
+Assets/Resources/OVRBuildConfig.asset.meta
