@@ -1,4 +1,4 @@
-// BoardAnchorReceiver.cs  (v3: + solution event)
+// BoardAnchorReceiver.cs  (v4: + state event)
 using System;
 using UnityEngine;
 
@@ -22,6 +22,7 @@ namespace CoThink
 
         public event Action<string> OnDetectionsJson;
         public event Action<string> OnSolutionJson;
+        public event Action<string> OnStateJson;
         public Transform BoardRoot => m_boardRoot;
         public bool IsAnchored => m_anchored;
 
@@ -31,6 +32,7 @@ namespace CoThink
             while (m_sender.TryDequeueReplyJson(out var json))
             {
                 if (json.Contains("\"solution\""))   { OnSolutionJson?.Invoke(json);   continue; }
+                if (json.Contains("\"state\""))      { OnStateJson?.Invoke(json);      continue; }
                 if (json.Contains("\"detections\"")) { OnDetectionsJson?.Invoke(json); continue; }
                 BoardPoseReply r;
                 try { r = JsonUtility.FromJson<BoardPoseReply>(json); }
