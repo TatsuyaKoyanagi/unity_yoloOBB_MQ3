@@ -250,6 +250,7 @@ GameObject:
   - component: {fileID: 163771728}
   - component: {fileID: 163771727}
   - component: {fileID: 163771729}
+  - component: {fileID: 163771730}
   m_Layer: 0
   m_Name: blockmaker
   m_TagString: Untagged
@@ -264,7 +265,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 163771726}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1ad21c8adfe9e084e8be46028b7e2206, type: 3}
   m_Name: 
@@ -309,6 +310,44 @@ MonoBehaviour:
   m_thickness: 0.012
   m_zOffset: 0.006
   m_excludeRadius: 0.02
+--- !u!114 &163771730
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 163771726}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b036c58395d738145959f3d70e9653de, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_anchor: {fileID: 964992456}
+  m_pieceMeshes:
+  - name: I
+    mesh: {fileID: 4394420077881190621, guid: 1cfb51a333fcf31468956f93276f39f3, type: 3}
+  - name: J
+    mesh: {fileID: 4394420077881190621, guid: 40c1eedf9340dcf4e9de915b8867ba12, type: 3}
+  - name: L
+    mesh: {fileID: 4394420077881190621, guid: 807ef6fe900a3864880fc7c05f1bf926, type: 3}
+  - name: O
+    mesh: {fileID: 4394420077881190621, guid: 64ef8a7ac108e7240927191152f9cb8b, type: 3}
+  - name: S
+    mesh: {fileID: 4394420077881190621, guid: 5c921e0cb963515479127799803c5c46, type: 3}
+  - name: T
+    mesh: {fileID: 4394420077881190621, guid: 7838f16344e343a48a1ee34068ffdb3c, type: 3}
+  - name: Z
+    mesh: {fileID: 4394420077881190621, guid: 75f5a57b82f3aec4e9eacdbe8f7d0e9f, type: 3}
+  m_flipY: 1
+  m_flipAngle: 1
+  m_angleInDegrees: 0
+  m_cellSize: 2
+  m_heightScale: 1
+  m_baseEuler: {x: -90, y: 180, z: 0}
+  m_centerOnBounds: 1
+  m_zOffset: 0
+  m_planeOffset: {x: 0, y: 0.1}
+  m_alpha: 0.6
 --- !u!1 &308588196
 GameObject:
   m_ObjectHideFlags: 0
@@ -1361,6 +1400,10 @@ PrefabInstance:
       propertyPath: m_Camera
       value: 
       objectReference: {fileID: 1848740389}
+    - target: {fileID: 7985735940708293872, guid: 0e9e59a9b5566489fad35afecaeac3a9, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

@@ -12,6 +12,8 @@ Builds/
 /.utmp
 *.zip
 *.apk
+*.fbx
+*.fbx.meta
 RuntimeActionBindings.json
 RuntimeActionBindings.json.meta
 ProjectSettings\Packages\com.unity.testtools.codecoverage\Settings.json
