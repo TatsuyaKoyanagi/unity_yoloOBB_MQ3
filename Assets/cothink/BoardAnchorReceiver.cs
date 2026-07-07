@@ -1,4 +1,6 @@
-// BoardAnchorReceiver.cs  (v3: + solution event)
+// BoardAnchorReceiver.cs  (v4: 平滑化つき連続トラッキング + solution/detections event)
+// 盤面姿勢を毎フレーム追従し、Lerp/Slerpで平滑化（追従するが揺れない）。
+// 子のシルエット/マーカーは自動で一緒に動く。4隅が隠れたら最後の姿勢を保持。
 using System;
 using UnityEngine;
 
@@ -14,55 +16,77 @@ namespace CoThink
     public class BoardAnchorReceiver : MonoBehaviour
     {
         [SerializeField] private FrameSenderToPC m_sender;
-        [SerializeField] private bool m_continuousUpdate = false;
+        [Tooltip("毎フレーム盤面に追従(true) / 初回ロック後は固定(false)")]
+        [SerializeField] private bool m_trackContinuously = true;
+        [Tooltip("大きいほどキビキビ / 小さいほど滑らか。8〜15目安")]
+        [SerializeField] private float m_smooth = 10f;
+        [Tooltip("実行中にチェックすると次の良好姿勢で再ロック")]
         [SerializeField] private bool m_recalibrate = false;
 
         private Transform m_boardRoot;
-        private bool m_anchored;
+        private bool m_hasTarget, m_locked;
+        private Vector3 m_targetPos;
+        private Quaternion m_targetRot;
 
         public event Action<string> OnDetectionsJson;
         public event Action<string> OnSolutionJson;
+        public event Action<string> OnStateJson;
         public Transform BoardRoot => m_boardRoot;
-        public bool IsAnchored => m_anchored;
+        public bool IsAnchored => m_locked;
 
         private void Update()
         {
-            if (m_sender == null) return;
-            while (m_sender.TryDequeueReplyJson(out var json))
+            if (m_sender != null)
             {
+                while (m_sender.TryDequeueReplyJson(out var json))
+                {
+                    if (json.Contains("\"state\""))      { OnStateJson?.Invoke(json);      continue; }
                 if (json.Contains("\"solution\""))   { OnSolutionJson?.Invoke(json);   continue; }
-                if (json.Contains("\"detections\"")) { OnDetectionsJson?.Invoke(json); continue; }
-                BoardPoseReply r;
-                try { r = JsonUtility.FromJson<BoardPoseReply>(json); }
-                catch { continue; }
-                if (r == null || r.type != "board_pose" || !r.ok) continue;
-                HandleReply(r);
+                    if (json.Contains("\"detections\"")) { OnDetectionsJson?.Invoke(json); continue; }
+                    BoardPoseReply r;
+                    try { r = JsonUtility.FromJson<BoardPoseReply>(json); } catch { continue; }
+                    if (r == null || r.type != "board_pose" || !r.ok) continue;
+                    UpdateTarget(r);
+                }
             }
+            ApplySmoothing();
         }
 
-        private void HandleReply(BoardPoseReply r)
+        private void UpdateTarget(BoardPoseReply r)
         {
-            if (m_recalibrate) { m_anchored = false; m_recalibrate = false; }
-            if (m_anchored && !m_continuousUpdate) return;
+            if (m_recalibrate) { m_locked = false; m_recalibrate = false; }
+            if (m_locked && !m_trackContinuously) return; // 固定モードでロック済みなら更新しない
             if (!m_sender.TryGetCameraPose(r.frameId, out var camPose)) return;
 
             Vector3 posCv = new Vector3(r.px, r.py, r.pz);
             Quaternion rotCv = new Quaternion(r.qx, r.qy, r.qz, r.qw);
+            // OpenCVカメラ座標 -> Unity: Y反転
             Vector3 posCam = new Vector3(posCv.x, -posCv.y, posCv.z);
             Quaternion rotCam = new Quaternion(-rotCv.x, rotCv.y, -rotCv.z, rotCv.w);
-            Vector3 worldPos = camPose.position + camPose.rotation * posCam;
-            Quaternion worldRot = camPose.rotation * rotCam;
 
-            PlaceFrame(worldPos, worldRot);
-            m_anchored = true;
-            Debug.Log($"BoardAnchor: pinned at {worldPos:F3} (frame {r.frameId})");
+            m_targetPos = camPose.position + camPose.rotation * posCam;
+            m_targetRot = camPose.rotation * rotCam;
+            m_hasTarget = true;
         }
 
-        private void PlaceFrame(Vector3 pos, Quaternion rot)
+        private void ApplySmoothing()
         {
+            if (!m_hasTarget) return;
             if (m_boardRoot == null) m_boardRoot = BuildAxisGizmo();
-            m_boardRoot.SetPositionAndRotation(pos, rot);
-            m_boardRoot.gameObject.SetActive(true);
+
+            if (!m_locked)
+            {
+                m_boardRoot.SetPositionAndRotation(m_targetPos, m_targetRot); // 初回はスナップ
+                m_boardRoot.gameObject.SetActive(true);
+                m_locked = true;
+                Debug.Log($"BoardAnchor: locked at {m_targetPos:F3}");
+                return;
+            }
+            if (!m_trackContinuously) return;
+
+            float t = 1f - Mathf.Exp(-m_smooth * Time.deltaTime); // フレームレート非依存の平滑化
+            m_boardRoot.position = Vector3.Lerp(m_boardRoot.position, m_targetPos, t);
+            m_boardRoot.rotation = Quaternion.Slerp(m_boardRoot.rotation, m_targetRot, t);
         }
 
         private Transform BuildAxisGizmo()
