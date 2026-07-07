@@ -23,6 +23,13 @@ namespace CoThink
         [Tooltip("実行中にチェックすると次の良好姿勢で再ロック")]
         [SerializeField] private bool m_recalibrate = false;
 
+        [Header("カメラ→目オフセット補正")]
+        [Tooltip("パススルーカメラ光学中心から目(描画基準)へのオフセット[m]。" +
+                 "カメラ座標系(X右,Y上,Z前)で指定。Quest3の額カメラは目より上・前にあるため、" +
+                 "アンカーが上にずれる場合は y をマイナス方向へ(例 -0.02)。" +
+                 "この量はカメラ姿勢の回転で回してからワールド位置に加算される。")]
+        [SerializeField] private Vector3 m_camToEyeOffset = Vector3.zero;
+
         private Transform m_boardRoot;
         private bool m_hasTarget, m_locked;
         private Vector3 m_targetPos;
@@ -33,6 +40,13 @@ namespace CoThink
         public event Action<string> OnStateJson;
         public Transform BoardRoot => m_boardRoot;
         public bool IsAnchored => m_locked;
+
+        // ---- 実行時セッター（MR内設定パネル用）----
+        public Vector3 CamToEyeOffset
+        {
+            get => m_camToEyeOffset;
+            set => m_camToEyeOffset = value;
+        }
 
         private void Update()
         {
@@ -64,7 +78,11 @@ namespace CoThink
             Vector3 posCam = new Vector3(posCv.x, -posCv.y, posCv.z);
             Quaternion rotCam = new Quaternion(-rotCv.x, rotCv.y, -rotCv.z, rotCv.w);
 
-            m_targetPos = camPose.position + camPose.rotation * posCam;
+            // カメラ光学中心 → 目(描画基準)へのオフセットを、そのフレームのカメラ姿勢で
+            // 回してからワールド位置に加える（角度が変わっても正しく追従する）。
+            Vector3 eyePos = camPose.position + camPose.rotation * m_camToEyeOffset;
+
+            m_targetPos = eyePos + camPose.rotation * posCam;
             m_targetRot = camPose.rotation * rotCam;
             m_hasTarget = true;
         }

@@ -306,7 +306,7 @@ MonoBehaviour:
   m_angleInDegrees: 0
   m_duration: 1.4
   m_fade: 0.35
-  m_alpha: 0.7
+  m_alpha: 0.505
   m_thickness: 0.012
   m_zOffset: 0.006
   m_excludeRadius: 0.02
@@ -346,8 +346,8 @@ MonoBehaviour:
   m_baseEuler: {x: -90, y: 180, z: 0}
   m_centerOnBounds: 1
   m_zOffset: 0
-  m_planeOffset: {x: 0, y: 0.1}
-  m_alpha: 0.6
+  m_planeOffset: {x: 0, y: 0}
+  m_alpha: 0.57
 --- !u!1 &308588196
 GameObject:
   m_ObjectHideFlags: 0
@@ -1071,6 +1071,59 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &767341948
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 767341950}
+  - component: {fileID: 767341949}
+  m_Layer: 0
+  m_Name: Setting
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &767341949
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 767341948}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 913d8916b87ff5347bb2d2ed7f12c394, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_anchor: {fileID: 964992456}
+  m_goal: {fileID: 810249240}
+  m_pieceMesh: {fileID: 163771730}
+  m_nextMove: {fileID: 163771729}
+  m_headCamera: {fileID: 1848740389}
+  m_panelDistance: 0.6
+  m_startOpen: 0
+  m_repeatRate: 6
+  m_deadzone: 0.5
+--- !u!4 &767341950
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 767341948}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &770005541
 GameObject:
   m_ObjectHideFlags: 0
@@ -1136,9 +1189,11 @@ MonoBehaviour:
   m_flipY: 1
   m_thickness: 0.002
   m_zOffset: 0
-  m_ghostColor: {r: 0.65, g: 0.65, b: 0.65, a: 0.3}
-  m_placedColor: {r: 0.1, g: 0.85, b: 0.2, a: 0.45}
-  m_pulseSpeed: 5
+  m_ghostColor: {r: 0.65, g: 0.65, b: 0.65, a: 0.11764706}
+  m_placedColor: {r: 0.1, g: 0.85, b: 0.2, a: 0.22745098}
+  m_pulseSpeed: 1.9
+  m_nextAlphaMin: 0.25
+  m_nextAlphaAmp: 0.5
 --- !u!4 &810249241
 Transform:
   m_ObjectHideFlags: 0
@@ -1218,6 +1273,7 @@ MonoBehaviour:
   m_trackContinuously: 1
   m_smooth: 10
   m_recalibrate: 0
+  m_camToEyeOffset: {x: -0.01, y: -0.1, z: 0}
 --- !u!4 &964992457
 Transform:
   m_ObjectHideFlags: 0
@@ -2118,3 +2174,4 @@ SceneRoots:
   - {fileID: 163771728}
   - {fileID: 746706241}
   - {fileID: 810249241}
+  - {fileID: 767341950}

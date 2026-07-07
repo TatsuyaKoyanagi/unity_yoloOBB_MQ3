@@ -91,6 +91,13 @@ namespace CoThink
         private int m_builtBid = -999;
         private float m_loopT0;
 
+        // ---- 実行時セッター（MR内設定パネル用）----
+        public float Alpha
+        {
+            get => m_alpha;
+            set => m_alpha = Mathf.Clamp01(value);
+        }
+
         private void OnEnable()
         {
             if (m_anchor == null) return;

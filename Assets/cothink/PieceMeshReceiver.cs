@@ -82,6 +82,13 @@ namespace CoThink
             BuildMeshMap();
         }
 
+        // ---- 実行時セッター（MR内設定パネル用）----
+        public float Alpha
+        {
+            get => m_alpha;
+            set => m_alpha = Mathf.Clamp01(value);
+        }
+
         private void BuildMeshMap()
         {
             m_meshMap.Clear();

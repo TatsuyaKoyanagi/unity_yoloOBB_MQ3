@@ -27,6 +27,10 @@ namespace CoThink
         [SerializeField] private Color m_ghostColor  = new Color(0.65f, 0.65f, 0.65f, 0.30f); // 先の手
         [SerializeField] private Color m_placedColor = new Color(0.10f, 0.85f, 0.20f, 0.45f); // 配置済み
         [SerializeField, Range(0.5f, 10f)] private float m_pulseSpeed = 5f;                    // 次手パルス速度
+        [Tooltip("次手パルスのアルファ最小値（暗い時）")]
+        [SerializeField, Range(0f, 1f)] private float m_nextAlphaMin = 0.25f;
+        [Tooltip("次手パルスのアルファ振幅（最大 = min + amp）")]
+        [SerializeField, Range(0f, 1f)] private float m_nextAlphaAmp = 0.5f;
 
         // ピース本来色（PC側 BLOCK_COLORS と対応, BGR->RGB換算済み）
         private static readonly Dictionary<string, Color> PIECE_COLORS = new Dictionary<string, Color>
@@ -68,6 +72,23 @@ namespace CoThink
         }
 
         private void OnAnyJson(string _) { }
+
+        // ---- 実行時セッター（MR内設定パネル用）----
+        public float GhostAlpha
+        {
+            get => m_ghostColor.a;
+            set { var c = m_ghostColor; c.a = Mathf.Clamp01(value); m_ghostColor = c; }
+        }
+        public float PlacedAlpha
+        {
+            get => m_placedColor.a;
+            set { var c = m_placedColor; c.a = Mathf.Clamp01(value); m_placedColor = c; }
+        }
+        public float NextAlphaMin
+        {
+            get => m_nextAlphaMin;
+            set => m_nextAlphaMin = Mathf.Clamp01(value);
+        }
 
         private void OnSolution(string json)
         {
@@ -140,7 +161,7 @@ namespace CoThink
                 else if (bid == m_next && m_next >= 0)
                 {
                     Color baseCol = PIECE_COLORS.TryGetValue(piece.name ?? "", out var pc) ? pc : Color.white;
-                    col = new Color(baseCol.r, baseCol.g, baseCol.b, 0.25f + 0.5f * pulse);
+                    col = new Color(baseCol.r, baseCol.g, baseCol.b, m_nextAlphaMin + m_nextAlphaAmp * pulse);
                 }
                 else
                 {
