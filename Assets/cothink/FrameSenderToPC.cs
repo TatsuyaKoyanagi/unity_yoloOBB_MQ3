@@ -31,6 +31,8 @@ namespace CoThink
     {
         [Header("Camera (assign the same one CameraViewer uses)")]
         [SerializeField] private PassthroughCameraAccess m_cameraAccess;
+        [Tooltip("Aボタン再認識時にアンカーも再ロックする（固定モード用）。任意。")]
+        [SerializeField] private BoardAnchorReceiver m_anchor;
 
         [Header("Network")]
         [Tooltip("USB+adb reverse: keep 127.0.0.1. Wi-Fi: your PC's LAN IP.")]
@@ -61,6 +63,22 @@ namespace CoThink
         private Thread m_sendThread;
         private volatile bool m_running;
         private int m_frameId;
+
+        // Aボタン → 次フレームヘッダに cmd を1回載せる
+        private volatile bool m_relocatePending;
+        private bool m_prevA;
+
+        private void Update()
+        {
+            // Aボタン(右): トレイ位置の再認識をPCへ要求
+            bool aNow = OVRInput.Get(OVRInput.Button.One);
+            if (aNow && !m_prevA)
+            {
+                m_relocatePending = true;              // PC側: トレイ位置再認識
+                if (m_anchor != null) m_anchor.Relock(); // Quest側: アンカー再ロック（固定モード）
+            }
+            m_prevA = aNow;
+        }
 
         // ---- public API used by BoardAnchorReceiver (main thread) ----
         public bool TryGetCameraPose(int frameId, out Pose pose)
@@ -152,6 +170,14 @@ namespace CoThink
             // store camera world pose for this frameId (main thread)
             m_history[id % HISTORY] = new PoseEntry { frameId = id, pose = new Pose(p, q), valid = true };
 
+            // Aボタン要求があれば cmd を1回だけ載せる（載せたらクリア）
+            string cmdField = "";
+            if (m_relocatePending)
+            {
+                cmdField = ",\"cmd\":\"relocate\"";
+                m_relocatePending = false;
+            }
+
             string header =
                 "{\"frameId\":" + id +
                 ",\"tMs\":" + tMs +
@@ -161,7 +187,8 @@ namespace CoThink
                 ",\"cx\":" + F(cx) + ",\"cy\":" + F(cy) +
                 ",\"rw\":" + rw + ",\"rh\":" + rh + "}" +
                 ",\"pose\":{\"px\":" + F(p.x) + ",\"py\":" + F(p.y) + ",\"pz\":" + F(p.z) +
-                ",\"qx\":" + F(q.x) + ",\"qy\":" + F(q.y) + ",\"qz\":" + F(q.z) + ",\"qw\":" + F(q.w) + "}}";
+                ",\"qx\":" + F(q.x) + ",\"qy\":" + F(q.y) + ",\"qz\":" + F(q.z) + ",\"qw\":" + F(q.w) + "}" +
+                cmdField + "}";
 
             byte[] headerBytes = Encoding.UTF8.GetBytes(header);
             byte[] msg = new byte[4 + headerBytes.Length + 4 + jpg.Length];

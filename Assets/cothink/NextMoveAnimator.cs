@@ -53,6 +53,16 @@ namespace CoThink
         [Tooltip("配置済み同名ピース重心からこの距離以内の検出は開始位置候補から除外(m)")]
         [SerializeField] private float m_excludeRadius = 0.02f;
 
+        [Header("位置安定化（静止中固定・動いたら追従）")]
+        [Tooltip("検出遅延による頭部運動時のズレを抑える。ブロック静止中はゴースト開始位置を固定。")]
+        [SerializeField] private bool m_stabilize = true;
+        [Tooltip("この距離[m]以内の移動は静止とみなし更新しない")]
+        [SerializeField] private float m_moveThreshold = 0.008f;
+        [Tooltip("追従時の平滑化の強さ")]
+        [SerializeField] private float m_followSmooth = 12f;
+        [Tooltip("角度の静止しきい値[deg]")]
+        [SerializeField] private float m_angleThreshold = 8f;
+
         // ピース本来色（GoalLayerReceiver.PIECE_COLORS と同値）
         private static readonly Dictionary<string, Color> PIECE_COLORS = new Dictionary<string, Color>
         {
@@ -210,8 +220,26 @@ namespace CoThink
 
             if (found)
             {
-                m_srcPos = bestPos;
-                m_srcDeg = bestDeg;
+                if (!m_stabilize || !m_hasSrc)
+                {
+                    // 初回、または安定化オフ: そのまま採用
+                    m_srcPos = bestPos;
+                    m_srcDeg = bestDeg;
+                }
+                else
+                {
+                    // 静止中は固定、動いたら平滑追従（頭部運動時のズレ抑制）
+                    if (Vector2.Distance(bestPos, m_srcPos) > m_moveThreshold)
+                    {
+                        float a = 1f - Mathf.Exp(-m_followSmooth * Time.deltaTime);
+                        m_srcPos = Vector2.Lerp(m_srcPos, bestPos, a);
+                    }
+                    if (Mathf.Abs(Mathf.DeltaAngle(m_srcDeg, bestDeg)) > m_angleThreshold)
+                    {
+                        float a = 1f - Mathf.Exp(-m_followSmooth * Time.deltaTime);
+                        m_srcDeg = Mathf.LerpAngle(m_srcDeg, bestDeg, a);
+                    }
+                }
                 m_hasSrc = true;
             }
         }

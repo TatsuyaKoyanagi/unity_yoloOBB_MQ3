@@ -16,12 +16,16 @@ namespace CoThink
     public class BoardAnchorReceiver : MonoBehaviour
     {
         [SerializeField] private FrameSenderToPC m_sender;
-        [Tooltip("毎フレーム盤面に追従(true) / 初回ロック後は固定(false)")]
-        [SerializeField] private bool m_trackContinuously = true;
-        [Tooltip("大きいほどキビキビ / 小さいほど滑らか。8〜15目安")]
+        [Tooltip("毎フレーム盤面に追従(true) / 初回ロック後は固定(false)。盤面が動かない実験では false 推奨。")]
+        [SerializeField] private bool m_trackContinuously = false;
+        [Tooltip("大きいほどキビキビ / 小さいほど滑らか。8〜15目安（追従モードのみ有効）")]
         [SerializeField] private float m_smooth = 10f;
         [Tooltip("実行中にチェックすると次の良好姿勢で再ロック")]
         [SerializeField] private bool m_recalibrate = false;
+        [Tooltip("固定モードの初回ロック時、この数の姿勢が安定して揃うまで待つ（誤った初回姿勢での固定を防ぐ）")]
+        [SerializeField] private int m_lockStableFrames = 5;
+        [Tooltip("安定と見なす連続姿勢の許容ばらつき[m]")]
+        [SerializeField] private float m_lockStableTol = 0.01f;
 
         [Header("カメラ→目オフセット補正")]
         [Tooltip("パススルーカメラ光学中心から目(描画基準)へのオフセット[m]。" +
@@ -35,17 +39,48 @@ namespace CoThink
         private Vector3 m_targetPos;
         private Quaternion m_targetRot;
 
+        // 固定モードの初回ロック安定確認
+        private int m_lockStableCount;
+        private Vector3 m_lockPrevPos;
+        private bool m_lockPrevValid;
+
+        // オフセット再計算用: 最後に処理したカメラ姿勢と盤面ローカル姿勢を保持
+        private Pose m_lastCamPose;
+        private Vector3 m_lastPosCam;
+        private Quaternion m_lastRotCam;
+        private bool m_lastPoseValid;
+
         public event Action<string> OnDetectionsJson;
         public event Action<string> OnSolutionJson;
         public event Action<string> OnStateJson;
         public Transform BoardRoot => m_boardRoot;
         public bool IsAnchored => m_locked;
 
+        // アンカーを再ロック（固定モードで盤面を取り直したい時。Aボタン等から呼ぶ）
+        public void Relock()
+        {
+            m_locked = false;
+            m_lockStableCount = 0;
+            m_lockPrevValid = false;
+            Debug.Log("BoardAnchor: relock requested");
+        }
+
         // ---- 実行時セッター（MR内設定パネル用）----
         public Vector3 CamToEyeOffset
         {
             get => m_camToEyeOffset;
-            set => m_camToEyeOffset = value;
+            set
+            {
+                m_camToEyeOffset = value;
+                // 固定モードでロック後でも、保持した姿勢からアンカー位置を即再計算して反映
+                if (m_lastPoseValid && m_boardRoot != null)
+                {
+                    Vector3 eyePos = m_lastCamPose.position + m_lastCamPose.rotation * m_camToEyeOffset;
+                    m_targetPos = eyePos + m_lastCamPose.rotation * m_lastPosCam;
+                    m_targetRot = m_lastCamPose.rotation * m_lastRotCam;
+                    m_boardRoot.SetPositionAndRotation(m_targetPos, m_targetRot);
+                }
+            }
         }
 
         private void Update()
@@ -78,6 +113,12 @@ namespace CoThink
             Vector3 posCam = new Vector3(posCv.x, -posCv.y, posCv.z);
             Quaternion rotCam = new Quaternion(-rotCv.x, rotCv.y, -rotCv.z, rotCv.w);
 
+            // オフセット再計算用に姿勢を保持（ロック後のパネル調整で使う）
+            m_lastCamPose = camPose;
+            m_lastPosCam = posCam;
+            m_lastRotCam = rotCam;
+            m_lastPoseValid = true;
+
             // カメラ光学中心 → 目(描画基準)へのオフセットを、そのフレームのカメラ姿勢で
             // 回してからワールド位置に加える（角度が変わっても正しく追従する）。
             Vector3 eyePos = camPose.position + camPose.rotation * m_camToEyeOffset;
@@ -94,9 +135,29 @@ namespace CoThink
 
             if (!m_locked)
             {
-                m_boardRoot.SetPositionAndRotation(m_targetPos, m_targetRot); // 初回はスナップ
+                // 固定モード: 姿勢が m_lockStableFrames 連続で安定してからロック
+                //（誤った初回姿勢での固定を防ぐ）。追従モードでは即ロック。
+                if (!m_trackContinuously && m_lockStableFrames > 1)
+                {
+                    if (m_lockPrevValid &&
+                        Vector3.Distance(m_targetPos, m_lockPrevPos) <= m_lockStableTol)
+                        m_lockStableCount++;
+                    else
+                        m_lockStableCount = 0;
+                    m_lockPrevPos = m_targetPos;
+                    m_lockPrevValid = true;
+
+                    // 安定するまでは仮表示（追従）しつつロックは保留
+                    m_boardRoot.SetPositionAndRotation(m_targetPos, m_targetRot);
+                    m_boardRoot.gameObject.SetActive(true);
+                    if (m_lockStableCount < m_lockStableFrames) return;
+                }
+
+                m_boardRoot.SetPositionAndRotation(m_targetPos, m_targetRot);
                 m_boardRoot.gameObject.SetActive(true);
                 m_locked = true;
+                m_lockStableCount = 0;
+                m_lockPrevValid = false;
                 Debug.Log($"BoardAnchor: locked at {m_targetPos:F3}");
                 return;
             }

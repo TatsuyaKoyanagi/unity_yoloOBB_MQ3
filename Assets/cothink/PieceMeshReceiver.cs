@@ -28,6 +28,10 @@ namespace CoThink
 {
     [Serializable] internal class MeshDetItem { public string n; public float x, y, a; }
     [Serializable] internal class MeshDetMsg  { public string type; public int frameId; public MeshDetItem[] items; }
+    [Serializable] internal class MeshSolCell { public int r, c, bid; public string name; public float x, y, w, h; }
+    [Serializable] internal class MeshSolMsg  { public string type; public MeshSolCell[] cells; }
+    [Serializable] internal class MeshStateMsg { public string type; public int[] placed; public int next;
+        public string warnKind; public string warnName; }
 
     public class PieceMeshReceiver : MonoBehaviour
     {
@@ -63,6 +67,32 @@ namespace CoThink
 
         [Header("見た目")]
         [SerializeField, Range(0f, 1f)] private float m_alpha = 0.6f;
+        [Tooltip("配置確定したブロックの重畳STLを消す（視界をクリーンに）")]
+        [SerializeField] private bool m_hidePlaced = true;
+        [Tooltip("配置済み判定の距離しきい値[m]（目標セル重心からこの距離以内の検出を配置済みとみなし消す）")]
+        [SerializeField] private float m_placedRadius = 0.025f;
+        [Tooltip("解に含まれない種類のブロック（トラップ）にはSTLを重畳しない")]
+        [SerializeField] private bool m_hideTraps = true;
+
+        [Header("誤接触の×印")]
+        [Tooltip("touch警告中のブロック上に赤い×印を表示する")]
+        [SerializeField] private bool m_showWarnMark = true;
+        [Tooltip("×印の大きさ[m]")]
+        [SerializeField] private float m_markSize = 0.045f;
+        [Tooltip("×印のバーの太さ比率（サイズに対する割合）")]
+        [SerializeField, Range(0.05f, 0.4f)] private float m_markThickness = 0.16f;
+        [Tooltip("×印をブロックから浮かせる高さ[m]")]
+        [SerializeField] private float m_markHeight = 0.03f;
+
+        [Header("位置安定化（静止中固定・動いたら追従）")]
+        [Tooltip("検出の遅延による頭部運動時のズレを抑える。ブロック静止中はホログラムを固定。")]
+        [SerializeField] private bool m_stabilize = true;
+        [Tooltip("この距離[m]以内の移動は「静止」とみなし位置を更新しない")]
+        [SerializeField] private float m_moveThreshold = 0.008f;
+        [Tooltip("追従時の平滑化の強さ（大きいほどキビキビ）")]
+        [SerializeField] private float m_followSmooth = 12f;
+        [Tooltip("角度の静止しきい値[deg]")]
+        [SerializeField] private float m_angleThreshold = 8f;
 
         // ピース本来色（GoalLayer/NextMoveAnimator と同値）
         private static readonly Dictionary<string, Color> PIECE_COLORS = new Dictionary<string, Color>
@@ -76,6 +106,87 @@ namespace CoThink
         private readonly Dictionary<string, Mesh> m_meshMap = new Dictionary<string, Mesh>();
         private readonly Dictionary<string, Vector3> m_centerOffset = new Dictionary<string, Vector3>();
         private readonly List<GameObject> m_pool = new List<GameObject>();
+
+        // solution: bid -> ピース目標重心（盤面メートル、未flip）
+        private readonly Dictionary<int, Vector2> m_pieceTarget = new Dictionary<int, Vector2>();
+        // solution: 解に含まれる種類（トラップ判定用）
+        private readonly HashSet<string> m_solutionNames = new HashSet<string>();
+        // state: 配置確定済み bid
+        private readonly HashSet<int> m_placed = new HashSet<int>();
+        // state: 誤接触警告（touch のとき該当種類のSTLを赤く）
+        private string m_warnKind = "";
+        private string m_warnName = "";
+
+        // 位置安定化: 種類別に「安定化された検出」を保持し、フレーム間で最近傍マッチング
+        private class Track { public string name; public Vector2 pos; public float deg; public bool alive; }
+        private readonly List<Track> m_tracks = new List<Track>();
+        private readonly List<Track> m_frameTracks = new List<Track>();
+
+        // ×印マーカーのプール（BoardRoot直下、ブロック回転の影響を受けない）
+        private readonly List<GameObject> m_markPool = new List<GameObject>();
+
+        // 生検出を安定化して返す。静止中は位置固定、動いたら平滑追従。
+        private void StabilizeDetections(MeshDetItem[] items, List<Track> outTracks)
+        {
+            outTracks.Clear();
+            if (!m_stabilize)
+            {
+                foreach (var it in items)
+                {
+                    float deg0 = m_angleInDegrees ? it.a : it.a * Mathf.Rad2Deg;
+                    outTracks.Add(new Track { name=(it.n??"").ToUpperInvariant(), pos=new Vector2(it.x,it.y), deg=deg0, alive=true });
+                }
+                return;
+            }
+
+            foreach (var t in m_tracks) t.alive = false;
+            var usedTrack = new bool[m_tracks.Count];
+
+            foreach (var it in items)
+            {
+                string key = (it.n ?? "").ToUpperInvariant();
+                var p = new Vector2(it.x, it.y);
+                float deg = m_angleInDegrees ? it.a : it.a * Mathf.Rad2Deg;
+
+                // 同名の最近傍トラックを探す
+                int best = -1; float bd = float.MaxValue;
+                for (int i = 0; i < m_tracks.Count; i++)
+                {
+                    if (usedTrack[i] || m_tracks[i].name != key) continue;
+                    float d = Vector2.Distance(p, m_tracks[i].pos);
+                    if (d < bd) { bd = d; best = i; }
+                }
+
+                if (best >= 0 && bd < 0.05f)   // 近くに既存トラックあり → 更新判断
+                {
+                    var tr = m_tracks[best];
+                    usedTrack[best] = true;
+                    tr.alive = true;
+                    // 移動が小さければ固定、大きければ平滑追従
+                    if (bd > m_moveThreshold)
+                    {
+                        float a = 1f - Mathf.Exp(-m_followSmooth * Time.deltaTime);
+                        tr.pos = Vector2.Lerp(tr.pos, p, a);
+                    }
+                    float dd = Mathf.DeltaAngle(tr.deg, deg);
+                    if (Mathf.Abs(dd) > m_angleThreshold)
+                    {
+                        float a = 1f - Mathf.Exp(-m_followSmooth * Time.deltaTime);
+                        tr.deg = Mathf.LerpAngle(tr.deg, deg, a);
+                    }
+                    outTracks.Add(tr);
+                }
+                else                            // 新規トラック
+                {
+                    var tr = new Track { name=key, pos=p, deg=deg, alive=true };
+                    m_tracks.Add(tr);
+                    outTracks.Add(tr);
+                }
+            }
+
+            // 消えたトラックを除去
+            m_tracks.RemoveAll(t => !t.alive);
+        }
 
         private void Awake()
         {
@@ -107,13 +218,74 @@ namespace CoThink
 
         private void OnEnable()
         {
-            if (m_anchor != null) m_anchor.OnDetectionsJson += OnDetections;
+            if (m_anchor != null)
+            {
+                m_anchor.OnDetectionsJson += OnDetections;
+                m_anchor.OnSolutionJson += OnSolution;
+                m_anchor.OnStateJson += OnState;
+            }
         }
 
         private void OnDisable()
         {
-            if (m_anchor != null) m_anchor.OnDetectionsJson -= OnDetections;
+            if (m_anchor != null)
+            {
+                m_anchor.OnDetectionsJson -= OnDetections;
+                m_anchor.OnSolutionJson -= OnSolution;
+                m_anchor.OnStateJson -= OnState;
+            }
             HideAll();
+        }
+
+        // solution: 各bidの目標重心を保持（配置済み判定の基準）
+        private void OnSolution(string json)
+        {
+            MeshSolMsg msg;
+            try { msg = JsonUtility.FromJson<MeshSolMsg>(json); } catch { return; }
+            if (msg == null || msg.cells == null) return;
+            var sum = new Dictionary<int, Vector2>();
+            var cnt = new Dictionary<int, int>();
+            foreach (var c in msg.cells)
+            {
+                sum[c.bid] = (sum.TryGetValue(c.bid, out var s) ? s : Vector2.zero) + new Vector2(c.x, c.y);
+                cnt[c.bid] = (cnt.TryGetValue(c.bid, out var k) ? k : 0) + 1;
+            }
+            m_pieceTarget.Clear();
+            foreach (var kv in sum)
+                m_pieceTarget[kv.Key] = kv.Value / cnt[kv.Key];
+
+            // 解に含まれる種類を記録（トラップ判定用）
+            m_solutionNames.Clear();
+            foreach (var c in msg.cells)
+                if (!string.IsNullOrEmpty(c.name))
+                    m_solutionNames.Add(c.name.ToUpperInvariant());
+
+            m_placed.Clear();
+        }
+
+        // state: 配置確定済み bid を更新
+        private void OnState(string json)
+        {
+            MeshStateMsg msg;
+            try { msg = JsonUtility.FromJson<MeshStateMsg>(json); } catch { return; }
+            if (msg == null || msg.type != "state") return;
+            m_placed.Clear();
+            if (msg.placed != null)
+                foreach (var b in msg.placed) m_placed.Add(b);
+            m_warnKind = msg.warnKind ?? "";
+            m_warnName = (msg.warnName ?? "").ToUpperInvariant();
+        }
+
+        // ある検出位置が、配置済みピースの目標近傍か
+        private bool IsAtPlaced(Vector2 pos)
+        {
+            if (!m_hidePlaced) return false;
+            foreach (var bid in m_placed)
+            {
+                if (!m_pieceTarget.TryGetValue(bid, out var t)) continue;
+                if (Vector2.Distance(pos, t) <= m_placedRadius) return true;
+            }
+            return false;
         }
 
         private void OnDetections(string json)
@@ -125,16 +297,37 @@ namespace CoThink
             try { msg = JsonUtility.FromJson<MeshDetMsg>(json); } catch { return; }
             if (msg == null || msg.items == null) { Hide(0); return; }
 
-            int n = msg.items.Length;
+            // 生検出を安定化（静止中は位置固定、動いたら平滑追従）
+            StabilizeDetections(msg.items, m_frameTracks);
+            int n = m_frameTracks.Count;
             EnsurePool(n);
 
+            int marksUsed = 0;
             for (int i = 0; i < n; i++)
             {
-                var it = msg.items[i];
+                var tr = m_frameTracks[i];
                 var go = m_pool[i];
-                string key = (it.n ?? "").ToUpperInvariant();
+                string key = tr.name;
 
                 if (!m_meshMap.TryGetValue(key, out var mesh))
+                {
+                    go.SetActive(false);
+                    continue;
+                }
+
+                // touch警告中の該当種類か（誤ブロックを掴んでいる）
+                bool touchWarn = (m_warnKind == "touch" && key == m_warnName);
+
+                // トラップ（解に含まれない種類）にはSTLを出さない。
+                // ただし touch 警告中は例外: 掴んだトラップを赤で出現させ「使わない」を伝える。
+                if (m_hideTraps && m_solutionNames.Count > 0 && !m_solutionNames.Contains(key) && !touchWarn)
+                {
+                    go.SetActive(false);
+                    continue;
+                }
+
+                // 配置確定済みピースの位置にある検出は重畳STLを消す（視界クリーン化）
+                if (IsAtPlaced(tr.pos))
                 {
                     go.SetActive(false);
                     continue;
@@ -145,14 +338,14 @@ namespace CoThink
 
                 go.transform.SetParent(root, false);
 
-                // 位置（盤面メートル → 平面内オフセット加算 → flipY 適用）
-                float rawX = it.x + m_planeOffset.x;
-                float rawY = it.y + m_planeOffset.y;
+                // 位置（安定化後の盤面メートル → 平面内オフセット加算 → flipY 適用）
+                float rawX = tr.pos.x + m_planeOffset.x;
+                float rawY = tr.pos.y + m_planeOffset.y;
                 float y = m_flipY ? -rawY : rawY;
                 go.transform.localPosition = new Vector3(rawX, y, m_zOffset);
 
-                // 回転（盤面系角度 a を Z 回り）＋ 盤面に寝かせる初期回転
-                float deg = m_angleInDegrees ? it.a : it.a * Mathf.Rad2Deg;
+                // 回転（安定化後の盤面系角度[deg] を Z 回り）＋ 盤面に寝かせる初期回転
+                float deg = tr.deg;
                 if (m_flipAngle) deg = -deg;
                 go.transform.localRotation = Quaternion.Euler(0f, 0f, deg) * Quaternion.Euler(m_baseEuler);
 
@@ -166,9 +359,25 @@ namespace CoThink
                 else
                     child.localPosition = Vector3.zero;
 
-                Color col = PIECE_COLORS.TryGetValue(key, out var pc) ? pc : Color.white;
-                col.a = m_alpha;
+                Color col;
+                if (touchWarn)
+                {
+                    // 誤接触: ブロックを黒く（上に赤い×印が乗る）
+                    col = new Color(0.05f, 0.05f, 0.05f, Mathf.Max(m_alpha, 0.85f));
+                }
+                else
+                {
+                    col = PIECE_COLORS.TryGetValue(key, out var pc) ? pc : Color.white;
+                    col.a = m_alpha;
+                }
                 SetColor(go, col);
+
+                // 誤接触ブロックの上に赤い×印を重畳
+                if (touchWarn && m_showWarnMark)
+                {
+                    PlaceMark(marksUsed++, root,
+                              new Vector3(rawX, y, m_zOffset + m_markHeight));
+                }
 
                 go.SetActive(true);
 
@@ -183,6 +392,59 @@ namespace CoThink
                 }
             }
             Hide(n);
+            HideMarks(marksUsed);
+        }
+
+        // ---- ×印マーカー ----
+        private GameObject BuildMark()
+        {
+            var root = new GameObject("WarnMark");
+            for (int k = 0; k < 2; k++)
+            {
+                var bar = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                var c = bar.GetComponent<Collider>(); if (c != null) Destroy(c);
+                bar.transform.SetParent(root.transform, false);
+                bar.transform.localRotation = Quaternion.Euler(0f, 0f, k == 0 ? 45f : -45f);
+                var mr = bar.GetComponent<MeshRenderer>();
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                mr.receiveShadows = false;
+                Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
+                if (sh == null) sh = Shader.Find("Unlit/Color");
+                var mat = new Material(sh);
+                var red = new Color(1f, 0.05f, 0.05f, 1f);
+                if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", red);
+                mat.color = red;
+                // 半透明ブロック(Transparentキュー=3000)より後に描画し、×が確実に上に乗るようにする
+                mat.renderQueue = 3100;
+                mr.material = mat;
+            }
+            root.SetActive(false);
+            return root;
+        }
+
+        private void EnsureMarkPool(int n)
+        {
+            while (m_markPool.Count < n)
+                m_markPool.Add(BuildMark());
+        }
+
+        private void PlaceMark(int idx, Transform root, Vector3 localPos)
+        {
+            EnsureMarkPool(idx + 1);
+            var mark = m_markPool[idx];
+            mark.transform.SetParent(root, false);
+            mark.transform.localPosition = localPos;
+            mark.transform.localRotation = Quaternion.identity;
+            float t = m_markSize * m_markThickness;
+            for (int k = 0; k < 2; k++)
+                mark.transform.GetChild(k).localScale = new Vector3(m_markSize, t, t);
+            if (!mark.activeSelf) mark.SetActive(true);
+        }
+
+        private void HideMarks(int from)
+        {
+            for (int i = from; i < m_markPool.Count; i++)
+                if (m_markPool[i].activeSelf) m_markPool[i].SetActive(false);
         }
 
         private void EnsurePool(int n)

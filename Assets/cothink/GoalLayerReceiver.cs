@@ -13,7 +13,8 @@ namespace CoThink
 {
     [Serializable] internal class SolCell { public int r, c, bid; public string name; public float x, y, w, h; }
     [Serializable] internal class SolMsg  { public string type; public int gw, gh; public SolCell[] cells; public int[] order; }
-    [Serializable] internal class StateMsg { public string type; public int[] placed; public int next; }
+    [Serializable] internal class StateMsg { public string type; public int[] placed; public int next;
+        public string warnKind; public int warnBid; public string warnName; public float warnDeg; }
 
     public class GoalLayerReceiver : MonoBehaviour
     {
@@ -31,6 +32,12 @@ namespace CoThink
         [SerializeField, Range(0f, 1f)] private float m_nextAlphaMin = 0.25f;
         [Tooltip("次手パルスのアルファ振幅（最大 = min + amp）")]
         [SerializeField, Range(0f, 1f)] private float m_nextAlphaAmp = 0.5f;
+
+        [Header("警告色（Co-thinkフィードバック）")]
+        [Tooltip("角度違い: 位置は合っているが向きが違う")]
+        [SerializeField] private Color m_warnAngleColor = new Color(1f, 0.55f, 0f); // オレンジ
+        [Tooltip("誤ブロック: 次手の場所に別種のブロックが置かれている")]
+        [SerializeField] private Color m_warnPieceColor = new Color(1f, 0.1f, 0.1f); // 赤
 
         // ピース本来色（PC側 BLOCK_COLORS と対応, BGR->RGB換算済み）
         private static readonly Dictionary<string, Color> PIECE_COLORS = new Dictionary<string, Color>
@@ -54,6 +61,8 @@ namespace CoThink
         private readonly Dictionary<int, Piece> m_pieces = new Dictionary<int, Piece>(); // bid -> piece
         private readonly HashSet<int> m_placed = new HashSet<int>();
         private int m_next = -999;   // state未受信＝次手なし
+        private string m_warnKind = "";
+        private int m_warnBid = -1;
 
         private void OnEnable()
         {
@@ -77,7 +86,11 @@ namespace CoThink
         public float GhostAlpha
         {
             get => m_ghostColor.a;
-            set { var c = m_ghostColor; c.a = Mathf.Clamp01(value); m_ghostColor = c; }
+            set
+            {
+                var c = m_ghostColor; c.a = Mathf.Clamp01(value); m_ghostColor = c;
+                Debug.Log($"GoalLayer[{GetInstanceID()}]: GhostAlpha={c.a:F2} pieces={m_pieces.Count}");
+            }
         }
         public float PlacedAlpha
         {
@@ -137,6 +150,8 @@ namespace CoThink
             if (msg.placed != null)
                 foreach (var b in msg.placed) m_placed.Add(b);
             m_next = msg.next;
+            m_warnKind = msg.warnKind ?? "";
+            m_warnBid = msg.warnBid;
         }
 
         private void Update()
@@ -160,7 +175,11 @@ namespace CoThink
                 }
                 else if (bid == m_next && m_next >= 0)
                 {
-                    Color baseCol = PIECE_COLORS.TryGetValue(piece.name ?? "", out var pc) ? pc : Color.white;
+                    // 警告があれば次手を警告色でパルス（angle=オレンジ / piece=赤）
+                    Color baseCol;
+                    if (m_warnBid == bid && m_warnKind == "piece")      baseCol = m_warnPieceColor;
+                    else if (m_warnBid == bid && m_warnKind == "angle") baseCol = m_warnAngleColor;
+                    else baseCol = PIECE_COLORS.TryGetValue(piece.name ?? "", out var pc) ? pc : Color.white;
                     col = new Color(baseCol.r, baseCol.g, baseCol.b, m_nextAlphaMin + m_nextAlphaAmp * pulse);
                 }
                 else

@@ -149,7 +149,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_cameraAccess: {fileID: 1608124433}
-  m_pcHost: 192.168.11.17
+  m_anchor: {fileID: 964992456}
+  m_pcHost: 192.168.11.6
   m_pcPort: 5006
   m_sendInterval: 0.066
   m_jpegQuality: 70
@@ -310,6 +311,10 @@ MonoBehaviour:
   m_thickness: 0.012
   m_zOffset: 0.006
   m_excludeRadius: 0.02
+  m_stabilize: 1
+  m_moveThreshold: 0.008
+  m_followSmooth: 12
+  m_angleThreshold: 8
 --- !u!114 &163771730
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -347,7 +352,18 @@ MonoBehaviour:
   m_centerOnBounds: 1
   m_zOffset: 0
   m_planeOffset: {x: 0, y: 0}
-  m_alpha: 0.57
+  m_alpha: 0.205
+  m_hidePlaced: 1
+  m_placedRadius: 0.025
+  m_hideTraps: 1
+  m_showWarnMark: 1
+  m_markSize: 0.045
+  m_markThickness: 0.145
+  m_markHeight: 0.03
+  m_stabilize: 1
+  m_moveThreshold: 0.008
+  m_followSmooth: 12
+  m_angleThreshold: 8
 --- !u!1 &308588196
 GameObject:
   m_ObjectHideFlags: 0
@@ -1194,6 +1210,8 @@ MonoBehaviour:
   m_pulseSpeed: 1.9
   m_nextAlphaMin: 0.25
   m_nextAlphaAmp: 0.5
+  m_warnAngleColor: {r: 1, g: 0.55, b: 0, a: 1}
+  m_warnPieceColor: {r: 0.6981132, g: 0.6981132, b: 0.6981132, a: 1}
 --- !u!4 &810249241
 Transform:
   m_ObjectHideFlags: 0
@@ -1270,10 +1288,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_sender: {fileID: 4428478}
-  m_trackContinuously: 1
+  m_trackContinuously: 0
   m_smooth: 10
   m_recalibrate: 0
-  m_camToEyeOffset: {x: -0.01, y: -0.1, z: 0}
+  m_lockStableFrames: 5
+  m_lockStableTol: 0.01
+  m_camToEyeOffset: {x: 0, y: -0.02, z: 0}
 --- !u!4 &964992457
 Transform:
   m_ObjectHideFlags: 0
