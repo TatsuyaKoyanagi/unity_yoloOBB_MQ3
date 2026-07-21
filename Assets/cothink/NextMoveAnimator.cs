@@ -60,6 +60,8 @@ namespace CoThink
         [SerializeField] private float m_moveThreshold = 0.008f;
         [Tooltip("追従時の平滑化の強さ")]
         [SerializeField] private float m_followSmooth = 12f;
+        [Tooltip("実移動と確定するのに必要な連続フレーム数（頭部連動の一過性ズレを弾く）")]
+        [SerializeField] private int m_moveConfirmFrames = 3;
         [Tooltip("角度の静止しきい値[deg]")]
         [SerializeField] private float m_angleThreshold = 8f;
 
@@ -94,6 +96,7 @@ namespace CoThink
         private bool m_hasSrc;
         private Vector2 m_srcPos;
         private float m_srcDeg;
+        private int m_srcMoveCount;   // 移動確認カウンタ
 
         // ゴースト
         private Transform m_pivot;
@@ -118,10 +121,14 @@ namespace CoThink
 
         private void OnDisable()
         {
-            if (m_anchor == null) return;
-            m_anchor.OnSolutionJson -= OnSolution;
-            m_anchor.OnStateJson -= OnState;
-            m_anchor.OnDetectionsJson -= OnDetections;
+            if (m_anchor != null)
+            {
+                m_anchor.OnSolutionJson -= OnSolution;
+                m_anchor.OnStateJson -= OnState;
+                m_anchor.OnDetectionsJson -= OnDetections;
+            }
+            if (m_pivot != null && m_pivot.gameObject.activeSelf)
+                m_pivot.gameObject.SetActive(false);
         }
 
         // ---------- 受信 ----------
@@ -228,12 +235,19 @@ namespace CoThink
                 }
                 else
                 {
-                    // 静止中は固定、動いたら平滑追従（頭部運動時のズレ抑制）
+                    // 静止中は固定。移動判定が m_moveConfirmFrames 連続した時だけ追従
+                    //（頭部連動の一過性シフトを開始位置に反映しない）
                     if (Vector2.Distance(bestPos, m_srcPos) > m_moveThreshold)
                     {
-                        float a = 1f - Mathf.Exp(-m_followSmooth * Time.deltaTime);
-                        m_srcPos = Vector2.Lerp(m_srcPos, bestPos, a);
+                        m_srcMoveCount++;
+                        if (m_srcMoveCount >= m_moveConfirmFrames)
+                        {
+                            float a = 1f - Mathf.Exp(-m_followSmooth * Time.deltaTime);
+                            m_srcPos = Vector2.Lerp(m_srcPos, bestPos, a);
+                        }
                     }
+                    else m_srcMoveCount = 0;
+
                     if (Mathf.Abs(Mathf.DeltaAngle(m_srcDeg, bestDeg)) > m_angleThreshold)
                     {
                         float a = 1f - Mathf.Exp(-m_followSmooth * Time.deltaTime);

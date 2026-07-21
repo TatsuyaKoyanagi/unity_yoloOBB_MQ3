@@ -91,6 +91,8 @@ namespace CoThink
         [SerializeField] private float m_moveThreshold = 0.008f;
         [Tooltip("追従時の平滑化の強さ（大きいほどキビキビ）")]
         [SerializeField] private float m_followSmooth = 12f;
+        [Tooltip("実移動と確定するのに必要な連続フレーム数（頭部連動の一過性ズレを弾く）")]
+        [SerializeField] private int m_moveConfirmFrames = 3;
         [Tooltip("角度の静止しきい値[deg]")]
         [SerializeField] private float m_angleThreshold = 8f;
 
@@ -117,15 +119,37 @@ namespace CoThink
         private string m_warnKind = "";
         private string m_warnName = "";
 
-        // 位置安定化: 種類別に「安定化された検出」を保持し、フレーム間で最近傍マッチング
-        private class Track { public string name; public Vector2 pos; public float deg; public bool alive; }
+        // 位置安定化: 種類別に「安定化された検出」を保持し、フレーム間で最近傍マッチング。
+        // 【頭部連動ズレ対策】頭部運動でホモグラフィが揺らぐと全検出が一斉に同方向へシフトする。
+        // 全トラックの変位の中央値=グローバルドリフトとみなして差し引き、残差変位だけを
+        // 「本当のブロック移動」として扱う（1個だけ動く=実移動、全部動く=頭部連動ノイズ）。
+        // さらに移動確認カウンタ（m_moveConfirmFrames連続）を通過して初めて追従を開始する。
+        private class Track
+        {
+            public string name; public Vector2 pos; public float deg;
+            public bool alive; public int moveCount;
+        }
         private readonly List<Track> m_tracks = new List<Track>();
         private readonly List<Track> m_frameTracks = new List<Track>();
+
+        // 作業バッファ（毎フレームの割当を避ける）
+        private struct Match { public Track track; public Vector2 newPos; public float newDeg; public Vector2 disp; }
+        private readonly List<Match> m_matches = new List<Match>();
+        private readonly List<float> m_dxBuf = new List<float>();
+        private readonly List<float> m_dyBuf = new List<float>();
 
         // ×印マーカーのプール（BoardRoot直下、ブロック回転の影響を受けない）
         private readonly List<GameObject> m_markPool = new List<GameObject>();
 
-        // 生検出を安定化して返す。静止中は位置固定、動いたら平滑追従。
+        private static float Median(List<float> v)
+        {
+            if (v.Count == 0) return 0f;
+            v.Sort();
+            int m = v.Count / 2;
+            return (v.Count % 2 == 1) ? v[m] : 0.5f * (v[m - 1] + v[m]);
+        }
+
+        // 生検出を安定化して返す。頭部連動ドリフトは無視し、実移動のみ追従。
         private void StabilizeDetections(MeshDetItem[] items, List<Track> outTracks)
         {
             outTracks.Clear();
@@ -140,51 +164,79 @@ namespace CoThink
             }
 
             foreach (var t in m_tracks) t.alive = false;
-            var usedTrack = new bool[m_tracks.Count];
+            int n0 = m_tracks.Count;
+            var usedTrack = new bool[n0];
+            m_matches.Clear();
 
+            // ---- pass1: 最近傍マッチング（既存トラックのみ対象）----
             foreach (var it in items)
             {
                 string key = (it.n ?? "").ToUpperInvariant();
                 var p = new Vector2(it.x, it.y);
                 float deg = m_angleInDegrees ? it.a : it.a * Mathf.Rad2Deg;
 
-                // 同名の最近傍トラックを探す
                 int best = -1; float bd = float.MaxValue;
-                for (int i = 0; i < m_tracks.Count; i++)
+                for (int i = 0; i < n0; i++)
                 {
                     if (usedTrack[i] || m_tracks[i].name != key) continue;
                     float d = Vector2.Distance(p, m_tracks[i].pos);
                     if (d < bd) { bd = d; best = i; }
                 }
 
-                if (best >= 0 && bd < 0.05f)   // 近くに既存トラックあり → 更新判断
+                if (best >= 0 && bd < 0.05f)
                 {
                     var tr = m_tracks[best];
                     usedTrack[best] = true;
                     tr.alive = true;
-                    // 移動が小さければ固定、大きければ平滑追従
-                    if (bd > m_moveThreshold)
-                    {
-                        float a = 1f - Mathf.Exp(-m_followSmooth * Time.deltaTime);
-                        tr.pos = Vector2.Lerp(tr.pos, p, a);
-                    }
-                    float dd = Mathf.DeltaAngle(tr.deg, deg);
-                    if (Mathf.Abs(dd) > m_angleThreshold)
-                    {
-                        float a = 1f - Mathf.Exp(-m_followSmooth * Time.deltaTime);
-                        tr.deg = Mathf.LerpAngle(tr.deg, deg, a);
-                    }
+                    m_matches.Add(new Match { track = tr, newPos = p, newDeg = deg, disp = p - tr.pos });
                     outTracks.Add(tr);
                 }
-                else                            // 新規トラック
+                else
                 {
-                    var tr = new Track { name=key, pos=p, deg=deg, alive=true };
+                    var tr = new Track { name = key, pos = p, deg = deg, alive = true };
                     m_tracks.Add(tr);
                     outTracks.Add(tr);
                 }
             }
 
-            // 消えたトラックを除去
+            // ---- グローバルドリフト（頭部連動の一斉シフト）を中央値で推定 ----
+            m_dxBuf.Clear(); m_dyBuf.Clear();
+            foreach (var mt in m_matches) { m_dxBuf.Add(mt.disp.x); m_dyBuf.Add(mt.disp.y); }
+            Vector2 drift = (m_matches.Count >= 2)
+                ? new Vector2(Median(m_dxBuf), Median(m_dyBuf))
+                : Vector2.zero;   // 1個以下ではドリフトと実移動を区別できないので補正しない
+
+            // ---- pass2: 残差変位で移動判定 → 確認カウンタ → 追従 ----
+            foreach (var mt in m_matches)
+            {
+                var tr = mt.track;
+                Vector2 residual = mt.disp - drift;
+
+                if (residual.magnitude > m_moveThreshold)
+                {
+                    tr.moveCount++;
+                    if (tr.moveCount >= m_moveConfirmFrames)
+                    {
+                        // 実移動と確定 → 生座標へ平滑追従
+                        float a = 1f - Mathf.Exp(-m_followSmooth * Time.deltaTime);
+                        tr.pos = Vector2.Lerp(tr.pos, mt.newPos, a);
+                    }
+                    // 確認中は位置を保持（頭部連動の一過性シフトを反映しない）
+                }
+                else
+                {
+                    tr.moveCount = 0;   // 静止 → 位置保持（world固定と同義）
+                }
+
+                // 角度は残差の影響が小さいので従来通り（しきい値超で平滑追従）
+                float dd = Mathf.DeltaAngle(tr.deg, mt.newDeg);
+                if (Mathf.Abs(dd) > m_angleThreshold)
+                {
+                    float a = 1f - Mathf.Exp(-m_followSmooth * Time.deltaTime);
+                    tr.deg = Mathf.LerpAngle(tr.deg, mt.newDeg, a);
+                }
+            }
+
             m_tracks.RemoveAll(t => !t.alive);
         }
 
@@ -235,6 +287,7 @@ namespace CoThink
                 m_anchor.OnStateJson -= OnState;
             }
             HideAll();
+            HideMarks(0);
         }
 
         // solution: 各bidの目標重心を保持（配置済み判定の基準）
@@ -380,16 +433,6 @@ namespace CoThink
                 }
 
                 go.SetActive(true);
-
-                // --- デバッグ: 最初の1個だけ配置情報を出力（原因切り分け用。確認後に削除可） ---
-                if (i == 0)
-                {
-                    var mfDbg = go.transform.GetChild(0).GetComponent<MeshFilter>();
-                    var b = (mfDbg != null && mfDbg.sharedMesh != null) ? mfDbg.sharedMesh.bounds.size : Vector3.zero;
-                    Debug.Log($"[PieceMesh] {key} localPos={go.transform.localPosition:F3} " +
-                              $"world={go.transform.position:F3} scale={go.transform.localScale:F4} " +
-                              $"meshBounds={b:F3} active={go.activeInHierarchy}");
-                }
             }
             Hide(n);
             HideMarks(marksUsed);

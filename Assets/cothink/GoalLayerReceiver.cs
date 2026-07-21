@@ -89,6 +89,7 @@ namespace CoThink
             set
             {
                 var c = m_ghostColor; c.a = Mathf.Clamp01(value); m_ghostColor = c;
+                // 診断用（パネル反映問題の切り分け）。解決したら削除可。
                 Debug.Log($"GoalLayer[{GetInstanceID()}]: GhostAlpha={c.a:F2} pieces={m_pieces.Count}");
             }
         }

@@ -150,7 +150,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_cameraAccess: {fileID: 1608124433}
   m_anchor: {fileID: 964992456}
-  m_pcHost: 192.168.11.6
+  m_pcHost: 192.168.11.4
   m_pcPort: 5006
   m_sendInterval: 0.066
   m_jpegQuality: 70
@@ -356,7 +356,7 @@ MonoBehaviour:
   m_hidePlaced: 1
   m_placedRadius: 0.025
   m_hideTraps: 1
-  m_showWarnMark: 1
+  m_showWarnMark: 0
   m_markSize: 0.045
   m_markThickness: 0.145
   m_markHeight: 0.03
@@ -1056,37 +1056,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1865528388}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &746706240
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 746706241}
-  m_Layer: 0
-  m_Name: Blocks
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &746706241
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 746706240}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &767341948
 GameObject:
   m_ObjectHideFlags: 0
@@ -1205,13 +1174,13 @@ MonoBehaviour:
   m_flipY: 1
   m_thickness: 0.002
   m_zOffset: 0
-  m_ghostColor: {r: 0.65, g: 0.65, b: 0.65, a: 0.11764706}
-  m_placedColor: {r: 0.1, g: 0.85, b: 0.2, a: 0.22745098}
+  m_ghostColor: {r: 0.65, g: 0.65, b: 0.65, a: 0.0627451}
+  m_placedColor: {r: 0.1, g: 0.85, b: 0.2, a: 0.11764706}
   m_pulseSpeed: 1.9
   m_nextAlphaMin: 0.25
   m_nextAlphaAmp: 0.5
   m_warnAngleColor: {r: 1, g: 0.55, b: 0, a: 1}
-  m_warnPieceColor: {r: 0.6981132, g: 0.6981132, b: 0.6981132, a: 1}
+  m_warnPieceColor: {r: 0.6981132, g: 0.6981132, b: 0.6981132, a: 0.1882353}
 --- !u!4 &810249241
 Transform:
   m_ObjectHideFlags: 0
@@ -2192,6 +2161,5 @@ SceneRoots:
   - {fileID: 4428479}
   - {fileID: 964992457}
   - {fileID: 163771728}
-  - {fileID: 746706241}
   - {fileID: 810249241}
   - {fileID: 767341950}
