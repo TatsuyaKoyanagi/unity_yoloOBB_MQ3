@@ -34,6 +34,9 @@ namespace CoThink
     {
         [SerializeField] private BoardAnchorReceiver m_anchor;
 
+        [Tooltip("移動+回転アニメーションの有効/無効（静的条件・デモ用の一括スイッチ）")]
+        [SerializeField] private bool m_enableAnimation = true;
+
         [Header("座標系（BlockMarker/GoalLayer と揃える）")]
         [Tooltip("BlockMarkerReceiver / GoalLayerReceiver の Flip Y と同じ値に。")]
         [SerializeField] private bool m_flipY = true;
@@ -263,7 +266,7 @@ namespace CoThink
         private void Update()
         {
             var root = (m_anchor != null) ? m_anchor.BoardRoot : null;
-            bool active = root != null && m_next >= 0 && m_hasSrc && m_pieces.ContainsKey(m_next);
+            bool active = m_enableAnimation && root != null && m_next >= 0 && m_hasSrc && m_pieces.ContainsKey(m_next);
             if (!active)
             {
                 if (m_pivot != null && m_pivot.gameObject.activeSelf) m_pivot.gameObject.SetActive(false);
@@ -353,7 +356,7 @@ namespace CoThink
                 mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
                 mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
                 mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-                mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+                mat.renderQueue = 3060;   // シルエット(3000)/STL(3050)より上、×印(3100)より下
             }
         }
 

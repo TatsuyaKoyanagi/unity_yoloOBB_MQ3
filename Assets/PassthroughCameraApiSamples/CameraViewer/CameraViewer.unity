@@ -302,6 +302,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_anchor: {fileID: 964992456}
+  m_enableAnimation: 1
   m_flipY: 1
   m_flipAngle: 1
   m_angleInDegrees: 0
@@ -314,6 +315,7 @@ MonoBehaviour:
   m_stabilize: 1
   m_moveThreshold: 0.008
   m_followSmooth: 12
+  m_moveConfirmFrames: 3
   m_angleThreshold: 8
 --- !u!114 &163771730
 MonoBehaviour:
@@ -363,6 +365,7 @@ MonoBehaviour:
   m_stabilize: 1
   m_moveThreshold: 0.008
   m_followSmooth: 12
+  m_moveConfirmFrames: 3
   m_angleThreshold: 8
 --- !u!1 &308588196
 GameObject:
@@ -1172,6 +1175,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_anchor: {fileID: 964992456}
   m_flipY: 1
+  m_stagedDisplay: 0
+  m_fullAnswerAlpha: 0.45
   m_thickness: 0.002
   m_zOffset: 0
   m_ghostColor: {r: 0.65, g: 0.65, b: 0.65, a: 0.0627451}

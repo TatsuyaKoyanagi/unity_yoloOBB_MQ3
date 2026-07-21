@@ -537,7 +537,7 @@ namespace CoThink
                 mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
                 mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
                 mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-                mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+                mat.renderQueue = 3050;   // シルエット(3000)より上に描き、升目の後ろに隠れないようにする
             }
             mr.material = mat;
         }

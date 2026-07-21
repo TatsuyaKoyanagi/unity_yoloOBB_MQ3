@@ -21,6 +21,10 @@ namespace CoThink
         [SerializeField] private BoardAnchorReceiver m_anchor;
         [Tooltip("BlockMarkerReceiver の Flip Y と同じ値に。")]
         [SerializeField] private bool m_flipY = true;
+        [Tooltip("段階提示(配置済/次手/先の手の状態色分け)。falseで解答を最初から全提示（各ピース本来色・パルスなし）")]
+        [SerializeField] private bool m_stagedDisplay = true;
+        [Tooltip("全提示モード時のアルファ")]
+        [SerializeField, Range(0f, 1f)] private float m_fullAnswerAlpha = 0.45f;
         [SerializeField] private float m_thickness = 0.002f;
         [SerializeField] private float m_zOffset = 0.0f;
 
@@ -170,7 +174,13 @@ namespace CoThink
                 int bid = kv.Key;
                 var piece = kv.Value;
                 Color col;
-                if (m_placed.Contains(bid))
+                if (!m_stagedDisplay)
+                {
+                    // 全提示モード: 状態を無視し、各ピース本来色を固定アルファで表示
+                    Color bc = PIECE_COLORS.TryGetValue(piece.name ?? "", out var fc) ? fc : Color.white;
+                    col = new Color(bc.r, bc.g, bc.b, m_fullAnswerAlpha);
+                }
+                else if (m_placed.Contains(bid))
                 {
                     col = m_placedColor;
                 }
